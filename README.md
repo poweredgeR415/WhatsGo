@@ -16,15 +16,15 @@ my fork of [wintersunset95's WhatsGo](https://github.com/WinterSunset95/WhatsGo)
 * Send videos
 * Send documents
 
-## Planned Features
+### Planned Features
 * fix what's crossed above
 
-### Requirements
+## Requirements
 * Go 1.25
 * feh (for viewing images)
 * mpv (for viewing videos)
 
-### Installation
+## Installation
 #### Clone and run
 
 ```
@@ -44,12 +44,12 @@ go run .
 ```
 
 
-### Usage
-## first run
+## Usage
+### first run
 * a qr code will print on the terminal to authenticate with your account
 * syncing of messages will start, you'll likely need to exit out and open again to see the initial fetched list
 
-## general usage
+### general usage
 * There are four main sections in the program:
     * Search: Search for contacts
     * Contacts: List of contacts, will filter based on 'Search'. Arrow keys to navigate, Enter to select.
