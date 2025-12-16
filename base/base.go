@@ -1,6 +1,7 @@
 package base
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -22,6 +23,7 @@ func WhatsGoBase() {
 	////////////////////////////////////////////////////
 	//// The main folder for whatsgo is ~/.whatsgo/ ////
 	////////////////////////////////////////////////////
+	ctx := context.Background()
 	oldDatabase, err := os.ReadFile(helpers.WhatsGoDbJson)
 	if err == nil {
 		err = json.Unmarshal(oldDatabase, &waconnect.WhatsGoDatabase);
@@ -35,8 +37,8 @@ func WhatsGoBase() {
 	cli, err := waconnect.WAConnect(helpers.WhatsGoDb)
 	// After the above code is executed once
 	// waconnect.WAClient should be available for use... i think
-	if err != nil {
-		fmt.Println("Error with connection: " + err.Error());
+	if err != nil || cli == nil || cli.Store == nil {
+		fmt.Printf("WAConnect failed: err=%v cli%v\n", err, cli);
 		return
 	}
 
@@ -44,11 +46,34 @@ func WhatsGoBase() {
 	//// Constants that must not change ////
 	////////////////////////////////////////
 	//var fullListOfContacts map[types.JID]types.ContactInfo
-	fullListOfContacts, err := cli.Store.Contacts.GetAllContacts();
 	if err != nil {
-		fmt.Println("Error getting contacts main.go")
+		fmt.Println("Error with connection:", err)
+		return
 	}
-	fullListOfGroups, err := cli.GetJoinedGroups();
+
+	if err != nil {
+	    fmt.Println("Error with connection:", err)
+	    return
+	}
+	if cli == nil {
+	    fmt.Println("WAConnect returned nil client")
+	    return
+	}
+	if cli.Store == nil {
+	    fmt.Println("Client store is nil (login likely failed)")
+	    return
+	}
+	if cli.Store.ID == nil {
+	    fmt.Println("Not logged in (Store.ID is nil). Cannot read contacts yet.")
+	    return
+	}
+
+
+	fullListOfContacts, err := cli.Store.Contacts.GetAllContacts(ctx);
+	if err != nil {
+		fmt.Println("Error getting contacts main.go", err)
+	}
+	fullListOfGroups, err := cli.GetJoinedGroups(ctx);
 	if err != nil {
 		fmt.Println("Error getting groups main.go")
 	}
@@ -69,6 +94,11 @@ func WhatsGoBase() {
 	miscActions := ui.UIHelpBox
 	modalSelector := ui.UIModalSelector
 
+//	mediaView := tview.NewTextView().
+//		SetDynamicColors(true).
+//		SetWrap(false)
+//	mediaView.SetBorder(true).SetTitle("Media")
+
 	_ = miscActions;
 	_ = body;
 	_ = modalSelector;
@@ -80,6 +110,7 @@ func WhatsGoBase() {
 	sectionsArray := []tview.Primitive{searchInput, contactsList, messageList, messageInputField};
 	sectionsArrayIndex := 0;
 	app.SetFocus(sectionsArray[sectionsArrayIndex])
+
 
 	////////////////////////////////////////
 	///// Lets handle some input here //////
@@ -115,7 +146,7 @@ func WhatsGoBase() {
 				} else if buttonLabel == "Exit" {
 					ui.UIApp.Stop()
 				} else if buttonLabel == "Logout" {
-					cli.Logout()
+					cli.Logout(ctx)
 					modalSelector.SetText("Logged out")
 					modalSelector.ClearButtons()
 					modalSelector.AddButtons([]string{"Exit"})
@@ -205,9 +236,17 @@ func WhatsGoBase() {
 	
 	// The contacts list. Also straightforward
 	contactsList.SetSelectedFunc(func(index int, userName string, userJid string, shortcut rune) {
-		converted, _ := types.ParseJID(userJid);
-		waconnect.CurrentChat = converted;
-		helpers.PutMessagesToList(cli, waconnect.WhatsGoDatabase, waconnect.CurrentChat, messageList);
+		converted, _ := types.ParseJID(userJid)
+		if err != nil {
+			return
+		}
+		waconnect.CurrentChat = converted
+
+		go func() {
+			helpers.PutMessagesToList(cli, waconnect.WhatsGoDatabase, waconnect.CurrentChat, messageList)
+
+			app.QueueUpdateDraw(func() {})
+	}()
 		searchInput.SetText("");
 		contacts = listOfContacts("", fullListOfContacts, fullListOfGroups);
 		helpers.PutContactsOnList(contacts, contactsList);
@@ -242,8 +281,8 @@ func WhatsGoBase() {
 				}
 
 				// Notify for new messages
-				userName := evt.Info.PushName;
-				notificationsBox.SetText(userName + " Sent a message");
+			//	userName := evt.Info.PushName;
+			//	notificationsBox.SetText(userName + " Sent a message");
 
 				// Prepare the message data
 				// We need to add the message to the waconnect.WhatsGoDatabase
@@ -253,9 +292,6 @@ func WhatsGoBase() {
 				chatId := evt.Info.Chat;
 				waconnect.WhatsGoDatabase[chatId] = append(waconnect.WhatsGoDatabase[chatId], messageData);
 				helpers.PushToDatabase(waconnect.WhatsGoDatabase)
-				if chatId == waconnect.CurrentChat {
-					helpers.PutMessagesToList(cli, waconnect.WhatsGoDatabase, waconnect.CurrentChat, messageList);
-				}
 
 				break
 

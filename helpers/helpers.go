@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+//	"bytes"
 	"strings"
 	"time"
 
@@ -171,37 +172,75 @@ func BackgroundDownloader(cli *whatsmeow.Client, list *tview.List, fullPath stri
 	/////////////////////////////////////////////
 	////// Handle Image, Sticker and Video //////
 	/////////////////////////////////////////////
-	if messageData.Message.ImageMessage != nil {
-		imageByte, err := cli.Download(messageData.Message.GetImageMessage())
-		if (err != nil) {
-			list.AddItem(mainText, "Error downloading image", 0, nil);
-		}
-		// save the bytearray to a file
-		os.WriteFile(fullPath, imageByte, 0644)
-	} else if messageData.Message.StickerMessage != nil {
-		stickerByte, err := cli.Download(messageData.Message.GetStickerMessage())
-		if (err != nil) {
-			list.AddItem(mainText, "Error downloading sticker", 0, nil);
-		}
-		// save the bytearray to a file
-		os.WriteFile(fullPath, stickerByte, 0644)
-	} else if messageData.Message.VideoMessage != nil {
-		videoByte, err := cli.Download(messageData.Message.GetVideoMessage())
-		if (err != nil) {
-			list.AddItem(mainText, "Error downloading video", 0, nil);
-		}
-		// save the bytearray to a file
-		os.WriteFile(fullPath, videoByte, 0644)
-	} else if messageData.Info.MediaType == "document" {
-		documentByte, err := cli.Download(messageData.Message.GetDocumentMessage())
-		if (err != nil) {
-			list.AddItem(mainText, "Error downloading document", 0, nil);
-		}
-		// save the bytearray to a file
-		os.WriteFile(fullPath, documentByte, 0644)
-	} else {
-		// Do nothing
+	ctx := context.Background()
+
+	// Decide qué media descargar (si hay alguna), man.
+	var downloadable whatsmeow.DownloadableMessage
+	var errLabel string
+
+	switch {
+	case messageData.Message.GetImageMessage() != nil:
+		downloadable = messageData.Message.GetImageMessage()
+		errLabel = "Error downloading image"
+
+	case messageData.Message.GetStickerMessage() != nil:
+		downloadable = messageData.Message.GetStickerMessage()
+		errLabel = "Error downloading sticker"
+
+	case messageData.Message.GetVideoMessage() != nil:
+		downloadable = messageData.Message.GetVideoMessage()
+		errLabel = "Error downloading video"
+
+	// En este repo mezclan MediaType para documentos, así que lo respetamos, man.
+	case messageData.Info.MediaType == "document" && messageData.Message.GetDocumentMessage() != nil:
+		downloadable = messageData.Message.GetDocumentMessage()
+		errLabel = "Error downloading document"
+
+	default:
+		return
 	}
+
+	data, err := cli.Download(ctx, downloadable)
+	if err != nil {
+		list.AddItem(mainText, errLabel, 0, nil)
+		return
+	}
+
+	if err := os.WriteFile(fullPath, data, 0644); err != nil {
+		list.AddItem(mainText, "Error writing file", 0, nil)
+		return
+	}
+//	if messageData.Message.ImageMessage != nil {
+//		imageByte, err := cli.Download(messageData.Message.GetImageMessage())
+//		if (err != nil) {
+//			list.AddItem(mainText, "Error downloading image", 0, nil);
+//		}
+//		// save the bytearray to a file
+//		os.WriteFile(fullPath, imageByte, 0644)
+//	} else if messageData.Message.StickerMessage != nil {
+//		stickerByte, err := cli.Download(messageData.Message.GetStickerMessage())
+//		if (err != nil) {
+//			list.AddItem(mainText, "Error downloading sticker", 0, nil);
+//		}
+//		// save the bytearray to a file
+//		os.WriteFile(fullPath, stickerByte, 0644)
+//	} else if messageData.Message.VideoMessage != nil {
+//		videoByte, err := cli.Download(messageData.Message.GetVideoMessage())
+//		if (err != nil) {
+//			list.AddItem(mainText, "Error downloading video", 0, nil);
+//		}
+//		// save the bytearray to a file
+//		os.WriteFile(fullPath, videoByte, 0644)
+//	} else if messageData.Info.MediaType == "document" {
+//		documentByte, err := cli.Download(messageData.Message.GetDocumentMessage())
+//		if (err != nil) {
+//			list.AddItem(mainText, "Error downloading document", 0, nil);
+//		}
+//		// save the bytearray to a file
+//		os.WriteFile(fullPath, documentByte, 0644)
+//	} else {
+//		// Do nothing
+//	}
 }
 
 func ScrollToBottom(list *tview.List) {
